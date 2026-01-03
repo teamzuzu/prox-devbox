@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 # functions
-from devbox_config import * 
+from devbox_config import *
 
 # proxmox functions
 from devbox_proxmox import prox_task, prox_destroy
@@ -13,7 +13,7 @@ kname = 'image_'
 # create image
 if cmd == 'create':
 
-  # get image name from url 
+  # get image name from url
   cloud_image = cloud_image_url.split('/')[-1]
   kmsg(f'{kname}create', f'{cloud_image} {storage}/{dev_id}', 'sys')
 
@@ -37,30 +37,23 @@ if cmd == 'create':
     kmsg(f'{kname}check', f'unable to download {cloud_image_url}', 'err')
     exit(0)
 
-  # script to run in devbox image
-  virtc_script = f'''\
-if [ -f /etc/selinux/config ] 
-then
-  sed -i s/enforcing/disabled/g /etc/selinux/config
-fi 
-
-if [ -f /etc/sysconfig/qemu-ga ]
-then
-  cp /dev/null /etc/sysconfig/qemu-ga 
-fi
-'''
   # shouldn't really need root/sudo but run into permissions problems
   kmsg(f'{kname}virt-customize', 'configuring image')
   virtc_cmd = f'''
-sudo virt-customize --smp 2 -m 2048 -a {cloud_image}   \
---install qemu-guest-agent --run-command "{virtc_script}"  \
+sudo virt-customize -a {cloud_image}   \
+--install qemu-guest-agent \
 '''
   local_os_process(virtc_cmd)
 
   # define image desc
   img_ts = str(datetime.now())
   image_desc = f'devbox {img_ts}'
-  prox_destroy(dev_id)
+
+  # destroy template if it exists
+  try:
+    prox_destroy(cluster_id)
+  except:
+    pass
 
   # create new server
   prox_task(prox.nodes(node).qemu.post(
