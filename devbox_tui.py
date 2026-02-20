@@ -411,10 +411,11 @@ class DevboxTUI(App):
                 env=env,
                 cwd=_root,
             )
-            log = self.query_one("#log", RichLog)
+            # BUG FIX: never call query_one() from a worker thread.
+            # Use call_from_thread(self._log, ...) so the write happens on the
+            # main thread where widget access is safe.
             for raw in proc.stdout:
-                text = Text.from_ansi(raw.rstrip())
-                self.call_from_thread(log.write, text)
+                self.call_from_thread(self._log, Text.from_ansi(raw.rstrip()))
             proc.wait()
 
             ok = proc.returncode == 0
@@ -433,6 +434,7 @@ class DevboxTUI(App):
 
     # ── interactive runner (SSH / terminal — suspends TUI) ────────────────────
 
+    @work(thread=True)
     def _run_interactive(self, args: list[str]) -> None:
         """Suspend the TUI, hand the terminal back, then resume."""
         cmd = [sys.executable, os.path.join(_root, 'devbox.py')] + args
@@ -440,6 +442,9 @@ class DevboxTUI(App):
             subprocess.run(cmd, cwd=_root)
 
     # ── button handlers ───────────────────────────────────────────────────────
+    # Simple commands: sync handler calls _run directly.
+    # Modal commands: sync handler starts a @work async flow so that
+    # push_screen_wait has the required worker context (Textual 0.53+).
 
     @on(Button.Pressed, "#img-create")
     def h_img_create(self) -> None:
@@ -457,14 +462,24 @@ class DevboxTUI(App):
     def h_nd_info(self) -> None:
         self._run(['nodes', 'info'])
 
+    # ── modal flows (each @on handler kicks off a @work async flow) ───────────
+
     @on(Button.Pressed, "#nd-create")
-    async def h_nd_create(self) -> None:
+    def h_nd_create(self) -> None:
+        self._flow_create()
+
+    @work
+    async def _flow_create(self) -> None:
         hostname = await self.push_screen_wait(CreateNodeModal())
         if hostname:
             self._run(['nodes', 'create', hostname])
 
     @on(Button.Pressed, "#nd-ssh")
-    async def h_nd_ssh(self) -> None:
+    def h_nd_ssh(self) -> None:
+        self._flow_ssh()
+
+    @work
+    async def _flow_ssh(self) -> None:
         nodes = _node_list()
         if not nodes:
             self._log("[yellow]No nodes available[/]")
@@ -474,7 +489,11 @@ class DevboxTUI(App):
             self._run_interactive(['nodes', 'ssh', hostname])
 
     @on(Button.Pressed, "#nd-terminal")
-    async def h_nd_terminal(self) -> None:
+    def h_nd_terminal(self) -> None:
+        self._flow_terminal()
+
+    @work
+    async def _flow_terminal(self) -> None:
         nodes = _node_list()
         if not nodes:
             self._log("[yellow]No nodes available[/]")
@@ -484,7 +503,11 @@ class DevboxTUI(App):
             self._run_interactive(['nodes', 'terminal', hostname])
 
     @on(Button.Pressed, "#nd-reboot")
-    async def h_nd_reboot(self) -> None:
+    def h_nd_reboot(self) -> None:
+        self._flow_reboot()
+
+    @work
+    async def _flow_reboot(self) -> None:
         nodes = _node_list()
         if not nodes:
             self._log("[yellow]No nodes available[/]")
@@ -494,7 +517,11 @@ class DevboxTUI(App):
             self._run(['nodes', 'reboot', hostname])
 
     @on(Button.Pressed, "#nd-destroy")
-    async def h_nd_destroy(self) -> None:
+    def h_nd_destroy(self) -> None:
+        self._flow_destroy()
+
+    @work
+    async def _flow_destroy(self) -> None:
         nodes = _node_list()
         if not nodes:
             self._log("[yellow]No nodes available[/]")
