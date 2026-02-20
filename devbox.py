@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-import os,sys
+import os, sys, importlib
 sys.path[0:0] = ['lib/']
 from devbox_ini import init_devbox_ini
 from devbox_kmsg import kmsg
@@ -38,13 +38,13 @@ def verbs_help():
   for kverb in verbs:
     print(f'- {kverb}')
 
-# print verbs cmds
+# print verbs cmds
 def cmds_help(verb):
   kmsg(f'devbox_{verb}', '[command]')
   print('commands:')
   for verb_cmd in list(cmds[verb]):
 
-    # if command with required arg
+    # if command with required arg
     if cmds[verb][verb_cmd]:
       print(f'- {verb_cmd} [{cmds[verb][verb_cmd]}]')
     else:
@@ -53,44 +53,47 @@ def cmds_help(verb):
 # handle verb parameter
 try:
 
-  # check for 1st argument
+  # check for 1st argument
   if sys.argv[1]:
 
-    # map 1st arg to verb
+    # map 1st arg to verb
     verb = sys.argv[1]
 
     # if verb not found in cmds dict
-    if not verb in verbs:
-      exit()
+    if verb not in verbs:
+      kmsg('devbox_error', f'unknown verb: "{verb}"', 'err')
+      verbs_help()
+      exit(1)
 
-# verb not found or passed
-except:
+# verb not found or passed
+except IndexError:
   verbs_help()
-  exit()
+  exit(0)
 
 # handle command
 try:
 
-  # 2nd arg = cmd
+  # 2nd arg = cmd
   if sys.argv[2]:
     cmd = sys.argv[2]
 
-    # if cmd not in list of commands
-    if not cmd in list(cmds[verb]):
-      exit()
+    # if cmd not in list of commands
+    if cmd not in list(cmds[verb]):
+      kmsg('devbox_error', f'unknown command: "{cmd}"', 'err')
+      cmds_help(verb)
+      exit(1)
 
-# 
-except:
+except IndexError:
   cmds_help(verb)
-  exit()
+  exit(0)
 
-# handle commands with required args eg 'node ssh hostname'
+# handle commands with required args eg 'node ssh hostname'
 try:
   if cmds[verb][cmd] and sys.argv[3]:
     pass
-except:
+except IndexError:
   kmsg(f'devbox_{verb}', f'{cmd} [{cmds[verb][cmd]}]')
   exit(0)
 
-# run passed verb
-exec_verb = __import__('verb_' + verb)
+# run passed verb module (modules execute at import time)
+importlib.import_module('verb_' + verb)

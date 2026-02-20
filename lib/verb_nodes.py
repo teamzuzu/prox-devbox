@@ -4,50 +4,53 @@
 from devbox_config import *
 from devbox_proxmox import *
 
-# passed command
+# passed command
 cmd = sys.argv[2]
 
 # map arg if passed
 try:
   hostname = sys.argv[3]
-except:
+except IndexError:
   pass
 
 # define kname
-kname = 'nodes_'+cmd
+kname = 'nodes_' + cmd
 
-# all commands aside from create require a hostname passed - so check them here
+# all commands aside from create/info require a hostname - check them here
 if cmd not in ['create', 'info']:
 
-  # for each vmid in list of vms generated in devbox_config
+  # for each vmid in list of vms generated in devbox_config
   for vmid in vms:
 
-    # if passed arg matches vmname
+    # if passed arg matches vmname
     if hostname == vmnames[vmid]:
       kmsg(kname, hostname)
 
-      # terminal 
+      # terminal
       if cmd == 'terminal':
         kmsg('node_terminal', f'u/p: {cloudinituser} / {cloudinitpass}', 'sys')
-        os.system(f'sudo qm terminal {vmid}')
+        subprocess.run(['sudo', 'qm', 'terminal', str(vmid)])
         exit(0)
 
-      # ssh command
+      # ssh command
       if cmd == 'ssh':
-        os.system(f'ssh -l {cloudinituser} {vmip(vmid)} -o StrictHostKeyChecking=no ')
+        subprocess.run([
+          'ssh', '-l', cloudinituser, vmip(vmid),
+          '-o', 'StrictHostKeyChecking=no',
+        ])
         exit(0)
 
-      # destroy vm
+      # destroy vm
       if cmd == 'destroy':
         prox_destroy(vmid)
         exit(0)
 
       # reboot
       if cmd == 'reboot':
-        os.system(f'sudo qm reboot {vmid} &')
+        subprocess.Popen(['sudo', 'qm', 'reboot', str(vmid)])
         exit(0)
 
-  # vm not found 
+  # vm not found
   kmsg(kname, f'{hostname} vm not found', 'err')
 
 # create utility node
@@ -56,7 +59,7 @@ if cmd == 'create':
   # work out next highest available id
   node_id = int(max(vms) + 1)
 
-  # check to see if already exists
+  # check to see if already exists
   if hostname not in vmnames.values():
     node_id = int(max(vms) + 1)
     kmsg(kname, f'creating node {node_id}/{hostname}', 'sys')
