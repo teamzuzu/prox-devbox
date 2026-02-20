@@ -119,17 +119,20 @@ class NodePickerModal(ModalScreen):
 
     def __init__(self, title: str, nodes: list[tuple[int, str, str]]) -> None:
         super().__init__()
-        self._title = title
-        self._nodes = nodes
+        # Avoid self._nodes: Textual's Widget uses _nodes internally to track
+        # child widgets, so naming our data attribute the same clobbers it and
+        # causes Textual to try to register our tuples as widgets.
+        self._modal_title = title
+        self._node_data   = nodes
 
     def compose(self) -> ComposeResult:
         with Vertical(id="picker-box"):
-            yield Label(self._title, id="picker-title")
-            if self._nodes:
+            yield Label(self._modal_title, id="picker-title")
+            if self._node_data:
                 yield ListView(
                     *[
                         ListItem(Label(f"  {name}   {ip}"), id=f"n-{vid}")
-                        for vid, name, ip in self._nodes
+                        for vid, name, ip in self._node_data
                     ],
                     id="node-list",
                 )
@@ -140,7 +143,7 @@ class NodePickerModal(ModalScreen):
     @on(ListView.Selected)
     def selected(self, event: ListView.Selected) -> None:
         vid  = int(event.item.id.split("-", 1)[1])
-        name = next(n for v, n, _ in self._nodes if v == vid)
+        name = next(n for v, n, _ in self._node_data if v == vid)
         self.dismiss(name)
 
     @on(Button.Pressed, "#picker-cancel")
