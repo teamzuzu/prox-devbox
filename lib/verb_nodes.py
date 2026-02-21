@@ -35,9 +35,14 @@ if cmd not in ['create', 'info']:
       # ssh command
       if cmd == 'ssh':
         subprocess.run([
-          'ssh', '-l', cloudinituser, vmip(vmid),
+          'ssh',
+          '-l', cloudinituser, vmip(vmid),
+          '-t',                                   # force TTY allocation
           '-o', 'StrictHostKeyChecking=no',
-        ])
+          '-o', 'ServerAliveInterval=15',         # detect dead connections
+          '-o', 'ServerAliveCountMax=3',
+          '-o', 'ExitOnForwardFailure=yes',
+        ], env={**os.environ, 'TERM': os.environ.get('TERM', 'xterm-256color')})
         exit(0)
 
       # destroy vm
