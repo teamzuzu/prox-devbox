@@ -5,6 +5,7 @@ Run from the project root:  python3 devbox_tui.py
 """
 
 import os
+import signal
 import sys
 import subprocess
 
@@ -439,10 +440,32 @@ class DevboxTUI(App):
 
     @work(thread=True)
     def _run_interactive(self, args: list[str]) -> None:
-        """Suspend the TUI, hand the terminal back, then resume."""
+        """Suspend the TUI, hand the terminal back, then resume.
+
+        Handles abrupt SSH disconnects gracefully: the terminal is always
+        restored (Textual's suspend() context guarantees this even on
+        exception), and any error is surfaced in the log panel.
+        """
         cmd = [sys.executable, os.path.join(_root, 'devbox.py')] + args
-        with self.suspend():
-            subprocess.run(cmd, cwd=_root)
+        label = " ".join(args)
+        try:
+            with self.suspend():
+                result = subprocess.run(cmd, cwd=_root)
+            rc = result.returncode
+            if rc == 0:
+                self.call_from_thread(self._log, f"[green]Session ended:[/] {label}")
+            else:
+                self.call_from_thread(
+                    self._log,
+                    f"[yellow]Session ended (rc={rc}):[/] {label}  "
+                    f"[dim](connection lost or remote exit)[/dim]",
+                )
+        except Exception as exc:
+            # Terminal is restored by suspend()'s __exit__ before we get here.
+            self.call_from_thread(
+                self._log, f"[red]Interactive session error ({label}):[/] {exc}"
+            )
+            self.call_from_thread(self._status, "Session error — terminal restored", True)
 
     # ── button handlers ───────────────────────────────────────────────────────
     # Simple commands: sync handler calls _run directly.
@@ -541,4 +564,7 @@ class DevboxTUI(App):
 # ── entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
+    # Ignore SIGHUP so the TUI survives outer SSH disconnects.
+    # The app can still be quit cleanly with 'q' or Ctrl+C.
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
     DevboxTUI().run()
